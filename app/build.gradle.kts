@@ -107,7 +107,7 @@ dependencies {
 
     implementation(libs.androidx.security.crypto)
 
-    debugImplementation(libs.timber)
+    implementation(libs.timber)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
