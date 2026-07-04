@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    // org.jetbrains.kotlin.android is no longer applied: AGP 9's built-in Kotlin support
+    // (https://developer.android.com/build/migrate-to-built-in-kotlin) replaces it and the two
+    // cannot coexist (applying both crashes with "Cannot add extension with name 'kotlin'").
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.ksp)
     alias(libs.plugins.kotlin.serialization)
@@ -8,12 +10,12 @@ plugins {
 
 android {
     namespace = "com.ai.notes"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.ai.notes"
         minSdk = 33
-        targetSdk = 35
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
 
@@ -38,9 +40,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    // No kotlin.compilerOptions { jvmTarget = ... } block needed: under AGP 9's built-in Kotlin
+    // support, kotlin.compilerOptions.jvmTarget defaults to android.compileOptions.targetCompatibility
+    // (JVM 17, set above), per https://developer.android.com/build/migrate-to-built-in-kotlin.
 
     buildFeatures {
         compose = true
@@ -48,6 +50,7 @@ android {
 
     ksp {
         arg("room.schemaLocation", "$projectDir/schemas")
+        arg("appfunctions:aggregateAppFunctions", "true")
     }
 
     packaging {
@@ -55,6 +58,25 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+}
+
+// AGP 9's built-in Kotlin + KSP does not register KSP's generated `resources/assets`
+// directory as Android assets, so the AppFunctions registration XML (app_functions_v2.xml)
+// never reaches the APK. Wire it in per-variant, with an explicit task dependency.
+// Reference: https://github.com/philipplackner/AppFunctionsDemo/blob/master/app/build.gradle.kts
+androidComponents {
+    onVariants { variant ->
+        val kspAssets = layout.buildDirectory
+            .dir("generated/ksp/${variant.name}/resources/assets")
+        kspAssets.get().asFile.mkdirs()
+        variant.sources.assets?.addStaticSourceDirectory(kspAssets.get().asFile.absolutePath)
+    }
+}
+
+// Ensure KSP (which produces app_functions_v2.xml) runs before assets are merged.
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
+    val capital = name.removePrefix("merge").removeSuffix("Assets")
+    dependsOn(tasks.matching { it.name == "ksp${capital}Kotlin" })
 }
 
 dependencies {
@@ -74,14 +96,9 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
-    // TODO(Task 13+): androidx.appfunctions:1.0.0-alpha09 (and its appsearch-platform-storage
-    // transitive dependency) requires compileSdk 37 / AGP 9.1.0+, which conflicts with this
-    // project's Global Constraints (compileSdk 35, AGP 8.6.1). Re-enable once the AppFunctions
-    // version/compileSdk conflict is resolved (either bump compileSdk+AGP project-wide, or pin
-    // an older appfunctions/appsearch release that supports compileSdk 35).
-    // implementation(libs.androidx.appfunctions)
-    // implementation(libs.androidx.appfunctions.service)
-    // ksp(libs.androidx.appfunctions.compiler)
+    implementation(libs.androidx.appfunctions)
+    implementation(libs.androidx.appfunctions.service)
+    ksp(libs.androidx.appfunctions.compiler)
 
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization.converter)
