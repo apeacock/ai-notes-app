@@ -68,6 +68,14 @@ fun NotesScreen(viewModel: NotesViewModel) {
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             Column(modifier = Modifier.fillMaxSize()) {
+                if (isMultiSelectMode) {
+                    com.ai.notes.ui.components.MultiSelectHeader(
+                        selectedCount = selectedIds.size,
+                        canSummarize = viewModel.canSummarize(),
+                        onSummarize = { viewModel.summarizeSelected() },
+                        onCancel = { viewModel.exitMultiSelectMode() }
+                    )
+                }
                 if (notes.isEmpty()) {
                     Column(
                         modifier = Modifier.fillMaxSize(),
