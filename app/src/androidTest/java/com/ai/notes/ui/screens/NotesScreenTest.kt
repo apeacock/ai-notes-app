@@ -1,6 +1,7 @@
 package com.ai.notes.ui.screens
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -68,8 +69,8 @@ class NotesScreenTest {
         composeTestRule.onNodeWithTag("note_card_1").performClick()
 
         composeTestRule.onNodeWithText("Edit Note").assertExists()
-        composeTestRule.onNodeWithText("Groceries").assertExists()
-        composeTestRule.onNodeWithText("Milk and eggs").assertExists()
+        composeTestRule.onNodeWithTag("note_title_field").assertTextContains("Groceries")
+        composeTestRule.onNodeWithTag("note_body_field").assertTextContains("Milk and eggs")
     }
 
     @Test
