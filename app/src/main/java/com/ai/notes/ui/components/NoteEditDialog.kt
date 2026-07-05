@@ -22,6 +22,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.ai.notes.data.model.Note
 
@@ -34,7 +37,9 @@ fun NoteEditDialog(
 ) {
     var title by remember { mutableStateOf(initialNote?.title ?: "") }
     var body by remember { mutableStateOf(initialNote?.body ?: "") }
-    var tags by remember { mutableStateOf(initialNote?.tags ?: emptyList()) }
+    var tags by remember {
+        mutableStateOf(initialNote?.tags?.filter { it.isNotBlank() }?.distinct() ?: emptyList())
+    }
     var tagInput by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(initialNote?.category ?: "") }
     var showCategorySuggestions by remember { mutableStateOf(false) }
@@ -74,6 +79,8 @@ fun NoteEditDialog(
                         value = tagInput,
                         onValueChange = { tagInput = it },
                         label = { Text("Add tag") },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { addTag() }),
                         modifier = Modifier.testTag("tag_input_field")
                     )
                     Button(

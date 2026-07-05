@@ -4,6 +4,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import org.junit.Rule
 import org.junit.Test
@@ -93,6 +94,39 @@ class NoteEditDialogTest {
         composeTestRule.onNodeWithTag("tag_add_button").performClick()
         composeTestRule.onNodeWithTag("tag_chip_remove_urgent").performClick()
         composeTestRule.onNodeWithText("urgent").assertDoesNotExist()
+    }
+
+    @Test
+    fun pressingEnterInTagInputAddsChip() {
+        composeTestRule.setContent {
+            NoteEditDialog(
+                initialNote = null,
+                existingCategories = emptyList(),
+                onSave = { _, _, _, _ -> },
+                onCancel = {}
+            )
+        }
+        composeTestRule.onNodeWithTag("tag_input_field").performTextInput("urgent")
+        composeTestRule.onNodeWithTag("tag_input_field").performImeAction()
+        composeTestRule.onNodeWithText("urgent").assertExists()
+        composeTestRule.onNodeWithTag("tag_chip_remove_urgent").assertExists()
+    }
+
+    @Test
+    fun selectingCategorySuggestionUpdatesCategoryField() {
+        composeTestRule.setContent {
+            NoteEditDialog(
+                initialNote = null,
+                existingCategories = listOf("Work", "Home"),
+                onSave = { _, _, _, _ -> },
+                onCancel = {}
+            )
+        }
+        composeTestRule.onNodeWithTag("category_field").performTextInput("Wo")
+        composeTestRule.onNodeWithText("Work").assertExists()
+        composeTestRule.onNodeWithText("Work").performClick()
+        composeTestRule.onNodeWithTag("category_field").assertExists()
+        composeTestRule.onNodeWithText("Work").assertExists()
     }
 
     @Test
