@@ -53,14 +53,18 @@ class AppFunctionToolBridge(private val context: Context) : ToolBridge {
         val metadata = cachedMetadata[functionName]
             ?: return ToolExecutionResult.Failure("Function '$functionName' was not found.")
 
-        val parameters = buildParameters(metadata, input)
-        val request = ExecuteAppFunctionRequest(packageName, metadata.id, parameters)
+        return try {
+            val parameters = buildParameters(metadata, input)
+            val request = ExecuteAppFunctionRequest(packageName, metadata.id, parameters)
 
-        return when (val response = manager.executeAppFunction(request)) {
-            is ExecuteAppFunctionResponse.Success ->
-                ToolExecutionResult.Success(readReturnValue(metadata, response.returnValue))
-            is ExecuteAppFunctionResponse.Error ->
-                ToolExecutionResult.Failure(response.error.errorMessage ?: "Function execution failed.")
+            when (val response = manager.executeAppFunction(request)) {
+                is ExecuteAppFunctionResponse.Success ->
+                    ToolExecutionResult.Success(readReturnValue(metadata, response.returnValue))
+                is ExecuteAppFunctionResponse.Error ->
+                    ToolExecutionResult.Failure(response.error.errorMessage ?: "Function execution failed.")
+            }
+        } catch (t: Throwable) {
+            ToolExecutionResult.Failure(t.message ?: "Failed to execute function '$functionName'.")
         }
     }
 

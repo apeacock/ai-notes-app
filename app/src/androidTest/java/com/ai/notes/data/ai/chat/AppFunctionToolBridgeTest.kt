@@ -1,14 +1,9 @@
 package com.ai.notes.data.ai.chat
 
 import android.content.Context
-import androidx.appfunctions.AppFunctionContext
 import androidx.appfunctions.AppFunctionManager
-import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.ai.notes.AppFunctions.NoteFunctions
-import com.ai.notes.data.database.NoteDatabase
-import com.ai.notes.data.database.repositories.NoteRepository
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -27,20 +22,6 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class AppFunctionToolBridgeTest {
-
-    private class FakeAppFunctionContext(ctx: Context) : AppFunctionContext {
-        override val context: Context = ctx
-    }
-
-    private fun seedNote(title: String, tags: List<String> = emptyList()): Int = runBlocking {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val db = Room.inMemoryDatabaseBuilder(context, NoteDatabase::class.java)
-            .allowMainThreadQueries()
-            .build()
-        val functions = NoteFunctions(NoteRepository(db.noteDao()))
-        val fakeContext = FakeAppFunctionContext(context)
-        functions.createNote(fakeContext, title, "Body for $title", tags, null).id
-    }
 
     @Test
     fun discoverTools_returnsAllFourFunctionsWithSchemas() = runBlocking {
@@ -87,7 +68,7 @@ class AppFunctionToolBridgeTest {
     }
 
     @Test
-    fun discoverTools_returnsEmptyListWhenAppFunctionManagerUnavailable() = runBlocking {
+    fun getInstance_isSupportedOnThisDevice() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         // Sanity check the precondition this device actually exercises the supported path;
         // documents the documented fallback behavior even though we can't force the
