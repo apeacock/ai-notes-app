@@ -24,6 +24,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -47,6 +49,7 @@ fun NoteCard(
     // drag gesture: without this, if the finger keeps moving past the threshold before
     // lifting, the delta callback would re-cross -SWIPE_DELETE_THRESHOLD_PX repeatedly.
     var deleteTriggeredThisGesture by remember { mutableStateOf(false) }
+    val hapticFeedback = LocalHapticFeedback.current
 
     Card(
         modifier = modifier
@@ -54,13 +57,20 @@ fun NoteCard(
             .padding(8.dp)
             .offset { IntOffset(dragOffset.toInt(), 0) }
             .testTag("note_card_${note.id}")
-            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongPress()
+                }
+            )
             .draggable(
                 orientation = Orientation.Horizontal,
                 state = rememberDraggableState { delta ->
                     dragOffset += delta
                     if (!deleteTriggeredThisGesture && dragOffset < -SWIPE_DELETE_THRESHOLD_PX) {
                         deleteTriggeredThisGesture = true
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                         onSwipeToDelete()
                     }
                 },
