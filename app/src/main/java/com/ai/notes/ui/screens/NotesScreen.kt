@@ -37,6 +37,7 @@ fun NotesScreen(viewModel: NotesViewModel) {
     val isMultiSelectMode by viewModel.isMultiSelectMode.collectAsState()
     val selectedIds by viewModel.selectedIds.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showSearchBar by remember { mutableStateOf(false) }
 
@@ -68,6 +69,13 @@ fun NotesScreen(viewModel: NotesViewModel) {
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             Column(modifier = Modifier.fillMaxSize()) {
+                if (showSearchBar) {
+                    com.ai.notes.ui.components.SearchBar(
+                        query = searchQuery,
+                        onQueryChanged = { viewModel.onSearchQueryChanged(it) },
+                        onClear = { viewModel.onSearchQueryChanged("") }
+                    )
+                }
                 if (isMultiSelectMode) {
                     com.ai.notes.ui.components.MultiSelectHeader(
                         selectedCount = selectedIds.size,
