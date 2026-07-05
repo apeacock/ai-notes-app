@@ -10,11 +10,14 @@ import com.ai.notes.ui.viewmodel.NotesViewModel
 const val NOTES_ROUTE = "notes"
 
 @Composable
-fun AppNavigation(viewModel: NotesViewModel) {
+fun AppNavigation(
+    viewModel: NotesViewModel,
+    onNavigateToApiKeyEdit: () -> Unit = {}
+) {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = NOTES_ROUTE) {
         composable(NOTES_ROUTE) {
-            NotesScreen(viewModel = viewModel)
+            NotesScreen(viewModel = viewModel, onNavigateToApiKeyEdit = onNavigateToApiKeyEdit)
         }
     }
 }

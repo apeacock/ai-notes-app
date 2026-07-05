@@ -38,7 +38,14 @@ class MainActivity : ComponentActivity() {
                     var hasApiKey by remember { mutableStateOf(apiKeyManager.hasApiKey()) }
                     if (hasApiKey) {
                         val viewModel: NotesViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = viewModelFactory)
-                        AppNavigation(viewModel = viewModel)
+                        AppNavigation(
+                            viewModel = viewModel,
+                            onNavigateToApiKeyEdit = {
+                                // No dedicated "edit key" route exists yet; reuse the initial
+                                // prompt screen to let the user re-enter their API key.
+                                hasApiKey = false
+                            }
+                        )
                     } else {
                         ApiKeyPromptScreen(onSave = { key ->
                             apiKeyManager.saveApiKey(key)

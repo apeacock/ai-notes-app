@@ -39,7 +39,10 @@ import com.ai.notes.ui.components.NoteCard
 import com.ai.notes.ui.viewmodel.NotesViewModel
 
 @Composable
-fun NotesScreen(viewModel: NotesViewModel) {
+fun NotesScreen(
+    viewModel: NotesViewModel,
+    onNavigateToApiKeyEdit: () -> Unit = {}
+) {
     val notes by viewModel.notes.collectAsState()
     val isMultiSelectMode by viewModel.isMultiSelectMode.collectAsState()
     val selectedIds by viewModel.selectedIds.collectAsState()
@@ -54,6 +57,10 @@ fun NotesScreen(viewModel: NotesViewModel) {
 
     LaunchedEffect(errorEvent) {
         val error = errorEvent ?: return@LaunchedEffect
+        // Critical errors (InvalidApiKey, DatabaseError) are rendered via AlertDialog below;
+        // every other AppError subtype is shown as a Snackbar here. This isn't an exhaustive
+        // `when` over AppError, so a newly added subtype defaults to Snackbar unless it's
+        // explicitly added to the critical branch of the `when` further down in this function.
         val isCritical = error is AppError.InvalidApiKey || error is AppError.DatabaseError
         if (!isCritical) {
             snackbarHostState.showSnackbar(error.userMessage)
@@ -163,17 +170,39 @@ fun NotesScreen(viewModel: NotesViewModel) {
         )
     }
 
-    val criticalError = errorEvent
-    if (criticalError is AppError.InvalidApiKey || criticalError is AppError.DatabaseError) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissError() },
-            title = { Text("Error") },
-            text = { Text(criticalError.userMessage) },
-            confirmButton = {
-                TextButton(onClick = { viewModel.dismissError() }) {
-                    Text("OK")
+    when (val criticalError = errorEvent) {
+        is AppError.InvalidApiKey -> {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissError() },
+                title = { Text("Invalid API Key") },
+                text = { Text(criticalError.userMessage) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.dismissError()
+                        onNavigateToApiKeyEdit()
+                    }) {
+                        Text("Update Key")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.dismissError() }) {
+                        Text("Cancel")
+                    }
                 }
-            }
-        )
+            )
+        }
+        is AppError.DatabaseError -> {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissError() },
+                title = { Text("Database Error") },
+                text = { Text(criticalError.userMessage) },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.dismissError() }) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
+        else -> Unit
     }
 }
