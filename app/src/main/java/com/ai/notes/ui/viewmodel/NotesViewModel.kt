@@ -96,6 +96,8 @@ class NotesViewModel(
                     is SummarizeResult.Success -> _summary.value = result.summary
                     is SummarizeResult.Failure -> _errorEvent.value = result.error
                 }
+            } catch (e: Exception) {
+                _errorEvent.value = AppError.DatabaseError(e.message ?: "Unknown database error")
             } finally {
                 _isLoading.value = false
             }
@@ -112,19 +114,31 @@ class NotesViewModel(
 
     fun createNote(title: String, body: String, tags: List<String>, category: String?) {
         viewModelScope.launch {
-            noteRepository.createNote(title, body, tags, category)
+            try {
+                noteRepository.createNote(title, body, tags, category)
+            } catch (e: Exception) {
+                _errorEvent.value = AppError.DatabaseError(e.message ?: "Unknown database error")
+            }
         }
     }
 
     fun updateNote(note: Note) {
         viewModelScope.launch {
-            noteRepository.updateNote(note)
+            try {
+                noteRepository.updateNote(note)
+            } catch (e: Exception) {
+                _errorEvent.value = AppError.DatabaseError(e.message ?: "Unknown database error")
+            }
         }
     }
 
     fun deleteNote(id: Int) {
         viewModelScope.launch {
-            noteRepository.deleteNote(id)
+            try {
+                noteRepository.deleteNote(id)
+            } catch (e: Exception) {
+                _errorEvent.value = AppError.DatabaseError(e.message ?: "Unknown database error")
+            }
         }
     }
 }

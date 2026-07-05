@@ -6,7 +6,7 @@
 
 # AppFunctions (prevent obfuscation of annotated methods)
 -keepclassmembers class com.ai.notes.AppFunctions.** {
-    @androidx.appfunctions.annotation.AppFunction *;
+    @androidx.appfunctions.service.AppFunction *;
 }
 
 # Retrofit

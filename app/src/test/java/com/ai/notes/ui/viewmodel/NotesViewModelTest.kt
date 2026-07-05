@@ -153,6 +153,69 @@ class NotesViewModelTest {
     }
 
     @Test
+    fun `createNote sets DatabaseError when repository throws`() = runTest {
+        val noteRepository = mockk<NoteRepository>()
+        every { noteRepository.getAllNotes() } returns MutableStateFlow(emptyList())
+        every { noteRepository.searchNotes(any()) } returns MutableStateFlow(emptyList())
+        coEvery { noteRepository.createNote(any(), any(), any(), any()) } throws RuntimeException("disk full")
+        val summarizationRepository = mockk<SummarizationRepository>()
+        val vm = NotesViewModel(noteRepository, summarizationRepository)
+
+        vm.createNote("Title", "Body", emptyList(), null)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(vm.errorEvent.value is AppError.DatabaseError)
+    }
+
+    @Test
+    fun `updateNote sets DatabaseError when repository throws`() = runTest {
+        val noteRepository = mockk<NoteRepository>()
+        every { noteRepository.getAllNotes() } returns MutableStateFlow(emptyList())
+        every { noteRepository.searchNotes(any()) } returns MutableStateFlow(emptyList())
+        coEvery { noteRepository.updateNote(any()) } throws RuntimeException("disk full")
+        val summarizationRepository = mockk<SummarizationRepository>()
+        val vm = NotesViewModel(noteRepository, summarizationRepository)
+
+        vm.updateNote(note(1))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(vm.errorEvent.value is AppError.DatabaseError)
+    }
+
+    @Test
+    fun `deleteNote sets DatabaseError when repository throws`() = runTest {
+        val noteRepository = mockk<NoteRepository>()
+        every { noteRepository.getAllNotes() } returns MutableStateFlow(emptyList())
+        every { noteRepository.searchNotes(any()) } returns MutableStateFlow(emptyList())
+        coEvery { noteRepository.deleteNote(any()) } throws RuntimeException("disk full")
+        val summarizationRepository = mockk<SummarizationRepository>()
+        val vm = NotesViewModel(noteRepository, summarizationRepository)
+
+        vm.deleteNote(1)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(vm.errorEvent.value is AppError.DatabaseError)
+    }
+
+    @Test
+    fun `summarizeSelected sets DatabaseError when repository throws`() = runTest {
+        val noteRepository = mockk<NoteRepository>()
+        every { noteRepository.getAllNotes() } returns MutableStateFlow(listOf(note(1), note(2)))
+        every { noteRepository.searchNotes(any()) } throws RuntimeException("query failed")
+        val summarizationRepository = mockk<SummarizationRepository>()
+        val vm = NotesViewModel(noteRepository, summarizationRepository)
+
+        vm.onSearchQueryChanged("x")
+        vm.enterMultiSelectMode()
+        vm.toggleSelection(1)
+        vm.toggleSelection(2)
+        vm.summarizeSelected()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(vm.errorEvent.value is AppError.DatabaseError)
+    }
+
+    @Test
     fun `notes reflects searchNotes results after query changes`() = runTest {
         val allNotes = listOf(note(1), note(2))
         val searchResults = listOf(note(2))

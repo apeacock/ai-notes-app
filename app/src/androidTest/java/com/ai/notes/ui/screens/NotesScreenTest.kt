@@ -4,6 +4,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.ai.notes.data.ai.SummarizationRepository
 import com.ai.notes.data.ai.SummarizeResult
 import com.ai.notes.data.database.repositories.NoteRepository
@@ -47,6 +48,28 @@ class NotesScreenTest {
         composeTestRule.onNodeWithText("Create").assertExists()
         composeTestRule.onNodeWithText("Search").assertExists()
         composeTestRule.onNodeWithText("Summarize").assertExists()
+    }
+
+    @Test
+    fun tappingNoteInNonMultiSelectModeOpensEditDialogPrefilled() {
+        val notes = listOf(
+            Note(id = 1, title = "Groceries", body = "Milk and eggs", tags = listOf("home"), category = "Personal", createdAt = 0L, updatedAt = 0L)
+        )
+        val noteRepository = mockk<NoteRepository>()
+        every { noteRepository.getAllNotes() } returns MutableStateFlow(notes)
+        every { noteRepository.searchNotes(any()) } returns MutableStateFlow(notes)
+        val summarizationRepository = mockk<SummarizationRepository>()
+        val viewModel = NotesViewModel(noteRepository, summarizationRepository)
+
+        composeTestRule.setContent {
+            NotesScreen(viewModel = viewModel)
+        }
+
+        composeTestRule.onNodeWithTag("note_card_1").performClick()
+
+        composeTestRule.onNodeWithText("Edit Note").assertExists()
+        composeTestRule.onNodeWithText("Groceries").assertExists()
+        composeTestRule.onNodeWithText("Milk and eggs").assertExists()
     }
 
     @Test

@@ -50,6 +50,7 @@ fun NotesScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val summary by viewModel.summary.collectAsState()
     var showCreateDialog by remember { mutableStateOf(false) }
+    var editingNote by remember { mutableStateOf<com.ai.notes.data.model.Note?>(null) }
     var showSearchBar by remember { mutableStateOf(false) }
     val errorEvent by viewModel.errorEvent.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -130,7 +131,13 @@ fun NotesScreen(
                                 note = note,
                                 isSelected = note.id in selectedIds,
                                 isMultiSelectMode = isMultiSelectMode,
-                                onClick = { if (isMultiSelectMode) viewModel.toggleSelection(note.id) },
+                                onClick = {
+                                    if (isMultiSelectMode) {
+                                        viewModel.toggleSelection(note.id)
+                                    } else {
+                                        editingNote = note
+                                    }
+                                },
                                 onLongPress = {
                                     if (!isMultiSelectMode) viewModel.enterMultiSelectMode()
                                     viewModel.toggleSelection(note.id)
@@ -160,6 +167,25 @@ fun NotesScreen(
                 showCreateDialog = false
             },
             onCancel = { showCreateDialog = false }
+        )
+    }
+
+    editingNote?.let { noteBeingEdited ->
+        com.ai.notes.ui.components.NoteEditDialog(
+            initialNote = noteBeingEdited,
+            existingCategories = notes.mapNotNull { it.category }.distinct(),
+            onSave = { title, body, tags, category ->
+                viewModel.updateNote(
+                    noteBeingEdited.copy(
+                        title = title,
+                        body = body,
+                        tags = tags,
+                        category = category
+                    )
+                )
+                editingNote = null
+            },
+            onCancel = { editingNote = null }
         )
     }
 
