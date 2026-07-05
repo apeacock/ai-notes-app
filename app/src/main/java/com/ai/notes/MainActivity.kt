@@ -12,12 +12,15 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.ai.notes.data.ai.RetrofitFactory
 import com.ai.notes.data.ai.SummarizationRepository
+import com.ai.notes.data.ai.chat.AppFunctionToolBridge
+import com.ai.notes.data.ai.chat.ChatRepository
 import com.ai.notes.data.database.NoteDatabase
 import com.ai.notes.data.database.repositories.NoteRepository
 import com.ai.notes.data.preferences.ApiKeyManager
 import com.ai.notes.ui.navigation.AppNavigation
 import com.ai.notes.ui.screens.ApiKeyPromptScreen
 import com.ai.notes.ui.theme.AiNotesTheme
+import com.ai.notes.ui.viewmodel.ChatViewModel
 import com.ai.notes.ui.viewmodel.NotesViewModel
 
 class MainActivity : ComponentActivity() {
@@ -32,14 +35,22 @@ class MainActivity : ComponentActivity() {
             initializer { NotesViewModel(noteRepository, summarizationRepository) }
         }
 
+        val toolBridge = AppFunctionToolBridge(applicationContext)
+        val chatRepository = ChatRepository(RetrofitFactory.createClaudeService(), apiKeyManager, toolBridge)
+        val chatViewModelFactory = viewModelFactory {
+            initializer { ChatViewModel(chatRepository) }
+        }
+
         setContent {
             AiNotesTheme {
                 Surface {
                     var hasApiKey by remember { mutableStateOf(apiKeyManager.hasApiKey()) }
                     if (hasApiKey) {
                         val viewModel: NotesViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = viewModelFactory)
+                        val chatViewModel: ChatViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = chatViewModelFactory)
                         AppNavigation(
                             viewModel = viewModel,
+                            chatViewModel = chatViewModel,
                             onNavigateToApiKeyEdit = {
                                 // No dedicated "edit key" route exists yet; reuse the initial
                                 // prompt screen to let the user re-enter their API key.

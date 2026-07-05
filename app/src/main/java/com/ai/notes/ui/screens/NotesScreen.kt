@@ -9,12 +9,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -23,6 +26,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,10 +42,12 @@ import com.ai.notes.data.ai.AppError
 import com.ai.notes.ui.components.NoteCard
 import com.ai.notes.ui.viewmodel.NotesViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotesScreen(
     viewModel: NotesViewModel,
-    onNavigateToApiKeyEdit: () -> Unit = {}
+    onNavigateToApiKeyEdit: () -> Unit = {},
+    onNavigateToChat: () -> Unit = {}
 ) {
     val notes by viewModel.notes.collectAsState()
     val isMultiSelectMode by viewModel.isMultiSelectMode.collectAsState()
@@ -70,6 +76,16 @@ fun NotesScreen(
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Notes") },
+                actions = {
+                    IconButton(onClick = onNavigateToChat, modifier = Modifier.testTag("chat_nav_icon")) {
+                        Icon(Icons.Filled.Chat, contentDescription = "Chat")
+                    }
+                }
+            )
+        },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             NavigationBar {

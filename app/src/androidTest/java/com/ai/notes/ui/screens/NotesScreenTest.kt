@@ -102,4 +102,18 @@ class NotesScreenTest {
         }
         composeTestRule.onNodeWithTag("loading_indicator").assertExists()
     }
+
+    @Test
+    fun tappingChatIconInvokesOnNavigateToChat() {
+        var navigatedToChat = false
+        composeTestRule.setContent {
+            NotesScreen(viewModel = buildViewModel(), onNavigateToChat = { navigatedToChat = true })
+        }
+
+        composeTestRule.onNodeWithTag("chat_nav_icon").performClick()
+
+        composeTestRule.runOnIdle {
+            assert(navigatedToChat) { "Expected onNavigateToChat to be invoked when the chat icon is tapped" }
+        }
+    }
 }
