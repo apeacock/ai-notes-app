@@ -20,6 +20,7 @@
 - `minSdk 33` / `compileSdk 37` / `targetSdk 37` (unchanged, already satisfies AppFunctions' requirements).
 - Kotlin discriminator for `ClaudeContentBlock`'s polymorphism is `"type"` — this is kotlinx.serialization's `Json` default `classDiscriminator`, so no `RetrofitFactory` change is needed for it to line up with Anthropic's own `"type"` field.
 - Real `androidx.appfunctions` API signatures used throughout this plan were confirmed directly against the resolved `appfunctions-1.0.0-alpha09-sources.jar` (not guessed) — see Task 4 for the exact classes/methods.
+- **Known limitation (accepted, Task 3 review):** if Claude calls `deleteNote` more than once within a single assistant turn, only the first pauses for confirmation via `NeedsConfirmation`; any additional `deleteNote` calls in that same turn execute immediately alongside the other non-destructive calls in `resolvedResults`. Accepted as a disclosed limitation rather than fixed, since it requires a queued/sequential confirmation mechanism to close and the scenario (an LLM invoking the same destructive tool twice in one turn for a single-note-focused assistant) is narrow.
 
 ---
 
