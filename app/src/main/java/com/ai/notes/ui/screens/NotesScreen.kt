@@ -38,6 +38,7 @@ fun NotesScreen(viewModel: NotesViewModel) {
     val selectedIds by viewModel.selectedIds.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val summary by viewModel.summary.collectAsState()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showSearchBar by remember { mutableStateOf(false) }
 
@@ -121,5 +122,24 @@ fun NotesScreen(viewModel: NotesViewModel) {
                 )
             }
         }
+    }
+
+    if (showCreateDialog) {
+        com.ai.notes.ui.components.NoteEditDialog(
+            initialNote = null,
+            existingCategories = notes.mapNotNull { it.category }.distinct(),
+            onSave = { title, body, tags, category ->
+                viewModel.createNote(title, body, tags, category)
+                showCreateDialog = false
+            },
+            onCancel = { showCreateDialog = false }
+        )
+    }
+
+    summary?.let { summaryText ->
+        com.ai.notes.ui.components.SummaryDialog(
+            summary = summaryText,
+            onDismiss = { viewModel.dismissSummary() }
+        )
     }
 }
