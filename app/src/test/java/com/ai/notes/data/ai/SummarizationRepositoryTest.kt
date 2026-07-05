@@ -2,7 +2,6 @@ package com.ai.notes.data.ai
 
 import android.content.Context
 import com.ai.notes.data.ai.model.ClaudeContentBlock
-import com.ai.notes.data.ai.model.ClaudeRequest
 import com.ai.notes.data.ai.model.ClaudeResponse
 import com.ai.notes.data.model.Note
 import com.ai.notes.data.preferences.ApiKeyManager
@@ -49,7 +48,7 @@ class SummarizationRepositoryTest {
     @Test
     fun `summarize returns Success with extracted text on 200 response`() = runTest {
         val service = mockk<ClaudeService>()
-        val response = Response.success(ClaudeResponse(content = listOf(ClaudeContentBlock("text", "Summary text"))))
+        val response = Response.success(ClaudeResponse(content = listOf(ClaudeContentBlock.Text("Summary text"))))
         coEvery { service.sendMessage(any(), any(), any()) } returns response
         val repository = SummarizationRepository(service, fakeApiKeyManager("sk-ant-key"))
 

@@ -1,5 +1,6 @@
 package com.ai.notes.data.ai
 
+import com.ai.notes.data.ai.model.ClaudeContentBlock
 import com.ai.notes.data.ai.model.ClaudeMessage
 import com.ai.notes.data.ai.model.ClaudeRequest
 import com.ai.notes.data.model.Note
@@ -24,13 +25,16 @@ class SummarizationRepository(
         val request = ClaudeRequest(
             model = CLAUDE_MODEL,
             maxTokens = 2000,
-            messages = listOf(ClaudeMessage(role = "user", content = prompt))
+            messages = listOf(ClaudeMessage(role = "user", content = listOf(ClaudeContentBlock.Text(prompt))))
         )
 
         return try {
             val response = claudeService.sendMessage(apiKey, CLAUDE_API_VERSION, request)
             if (response.isSuccessful) {
-                val text = response.body()?.content?.firstOrNull()?.text
+                val text = response.body()?.content
+                    ?.filterIsInstance<ClaudeContentBlock.Text>()
+                    ?.firstOrNull()
+                    ?.text
                 if (text != null) {
                     SummarizeResult.Success(text)
                 } else {
