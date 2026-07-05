@@ -39,7 +39,41 @@ class NoteCardTest {
         }
 
         composeTestRule.onNodeWithText("Sample Title").assertExists()
+        composeTestRule.onNodeWithText(sampleNote.body, substring = true).assertExists()
         composeTestRule.onNodeWithText("#work #urgent", substring = true).assertExists()
+    }
+
+    @Test
+    fun displaysCategoryWhenPresent() {
+        composeTestRule.setContent {
+            NoteCard(
+                note = sampleNote,
+                isSelected = false,
+                isMultiSelectMode = false,
+                onClick = {},
+                onLongPress = {},
+                onSwipeToDelete = {}
+            )
+        }
+
+        composeTestRule.onNodeWithTag("note_card_category_1").assertExists()
+        composeTestRule.onNodeWithText("Personal").assertExists()
+    }
+
+    @Test
+    fun hidesCategoryWhenAbsent() {
+        composeTestRule.setContent {
+            NoteCard(
+                note = sampleNote.copy(category = null),
+                isSelected = false,
+                isMultiSelectMode = false,
+                onClick = {},
+                onLongPress = {},
+                onSwipeToDelete = {}
+            )
+        }
+
+        composeTestRule.onNodeWithTag("note_card_category_1").assertDoesNotExist()
     }
 
     @Test
