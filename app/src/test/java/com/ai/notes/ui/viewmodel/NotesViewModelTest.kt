@@ -8,9 +8,11 @@ import com.ai.notes.data.model.Note
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -124,5 +126,51 @@ class NotesViewModelTest {
         val vm = buildViewModel()
         vm.onSearchQueryChanged("pasta")
         assertEquals("pasta", vm.searchQuery.value)
+    }
+
+    @Test
+    fun `summarizeSelected passes only the selected notes to summarizationRepository`() = runTest {
+        val notes = listOf(note(1), note(2), note(3))
+        val noteRepository = mockk<NoteRepository>()
+        every { noteRepository.getAllNotes() } returns MutableStateFlow(notes)
+        every { noteRepository.searchNotes(any()) } returns MutableStateFlow(notes)
+        val summarizationRepository = mockk<SummarizationRepository>()
+        val capturedNotes = slot<List<Note>>()
+        coEvery { summarizationRepository.summarize(capture(capturedNotes)) } returns
+            SummarizeResult.Success("Summary!")
+        val vm = NotesViewModel(noteRepository, summarizationRepository)
+
+        // Deliberately do NOT collect vm.notes first, to prove summarizeSelected does not
+        // depend on some external collector having started the lazily-shared notes flow.
+        vm.enterMultiSelectMode()
+        vm.toggleSelection(1)
+        vm.toggleSelection(3)
+        vm.summarizeSelected()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(2, capturedNotes.captured.size)
+        assertEquals(setOf(1, 3), capturedNotes.captured.map { it.id }.toSet())
+    }
+
+    @Test
+    fun `notes reflects searchNotes results after query changes`() = runTest {
+        val allNotes = listOf(note(1), note(2))
+        val searchResults = listOf(note(2))
+        val noteRepository = mockk<NoteRepository>()
+        every { noteRepository.getAllNotes() } returns MutableStateFlow(allNotes)
+        every { noteRepository.searchNotes("two") } returns MutableStateFlow(searchResults)
+        val summarizationRepository = mockk<SummarizationRepository>()
+        val vm = NotesViewModel(noteRepository, summarizationRepository)
+
+        // notes is lazily shared (WhileSubscribed), so a collector is needed to start it.
+        val collectorJob = launch { vm.notes.collect { } }
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(allNotes, vm.notes.value)
+
+        vm.onSearchQueryChanged("two")
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(searchResults, vm.notes.value)
+
+        collectorJob.cancel()
     }
 }

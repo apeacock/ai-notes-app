@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -76,14 +77,28 @@ class NotesViewModel(
             return
         }
 
-        val selectedNotes = notes.value.filter { it.id in _selectedIds.value }
+        // Fetch the current note list directly from the repository (rather than reading
+        // notes.value) so this doesn't silently depend on some external collector already
+        // having subscribed to the lazily-shared `notes` StateFlow (WhileSubscribed(5000)
+        // only starts collecting once something observes it, e.g. Compose's collectAsState).
+        val selectedIdsSnapshot = _selectedIds.value
+        val query = _searchQuery.value
         viewModelScope.launch {
             _isLoading.value = true
-            when (val result = summarizationRepository.summarize(selectedNotes)) {
-                is SummarizeResult.Success -> _summary.value = result.summary
-                is SummarizeResult.Failure -> _errorEvent.value = result.error
+            try {
+                val currentNotes = if (query.isBlank()) {
+                    noteRepository.getAllNotes().first()
+                } else {
+                    noteRepository.searchNotes(query).first()
+                }
+                val selectedNotes = currentNotes.filter { it.id in selectedIdsSnapshot }
+                when (val result = summarizationRepository.summarize(selectedNotes)) {
+                    is SummarizeResult.Success -> _summary.value = result.summary
+                    is SummarizeResult.Failure -> _errorEvent.value = result.error
+                }
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 
