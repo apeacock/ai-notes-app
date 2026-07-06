@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import com.ai.notes.data.ai.AppError
 import com.ai.notes.data.ai.chat.ChatRepository
 import com.ai.notes.data.ai.chat.ChatTurnResult
 import com.ai.notes.data.ai.chat.PendingToolUse
@@ -103,5 +104,22 @@ class ChatScreenTest {
         composeTestRule.waitUntil(timeoutMillis = 5_000) {
             composeTestRule.onAllNodesWithText("Okay, keeping it.").fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    @Test
+    fun errorFromRepositoryShowsSnackbarWithUserMessage() {
+        val chatRepository = mockk<ChatRepository>()
+        coEvery { chatRepository.send(any()) } returns ChatTurnResult.Error(AppError.InvalidApiKey)
+        val viewModel = ChatViewModel(chatRepository)
+
+        composeTestRule.setContent { ChatScreen(viewModel = viewModel) }
+
+        composeTestRule.onNodeWithTag("chat_input_field").performTextInput("Hi")
+        composeTestRule.onNodeWithTag("chat_send_button").performClick()
+
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            composeTestRule.onAllNodesWithText(AppError.InvalidApiKey.userMessage).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.onNodeWithText(AppError.InvalidApiKey.userMessage).assertExists()
     }
 }

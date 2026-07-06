@@ -17,11 +17,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,7 +46,15 @@ fun ChatScreen(viewModel: ChatViewModel, onBack: () -> Unit = {}) {
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val pendingConfirmation by viewModel.pendingConfirmation.collectAsState()
+    val errorEvent by viewModel.errorEvent.collectAsState()
     var inputText by remember { mutableStateOf("") }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(errorEvent) {
+        val error = errorEvent ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(error.userMessage)
+        viewModel.dismissError()
+    }
 
     Scaffold(
         topBar = {
@@ -55,7 +66,8 @@ fun ChatScreen(viewModel: ChatViewModel, onBack: () -> Unit = {}) {
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(modifier = Modifier.weight(1f).fillMaxSize()) {

@@ -61,6 +61,30 @@ class ClaudeModelsTest {
     }
 
     @Test
+    fun `ClaudeResponse deserializes a thinking block alongside tool_use without failing`() {
+        val body = """{"content":[{"type":"thinking","thinking":"reasoning...","signature":"abc123"},{"type":"tool_use","id":"tool_1","name":"searchNotes","input":{"query":"milk"}}],"stop_reason":"tool_use"}"""
+
+        val response = json.decodeFromString<ClaudeResponse>(body)
+
+        assertEquals("reasoning...", (response.content[0] as ClaudeContentBlock.Thinking).thinking)
+        assertEquals("searchNotes", (response.content[1] as ClaudeContentBlock.ToolUse).name)
+    }
+
+    @Test
+    fun `ClaudeMessage round-trips a thinking block's signature when echoed back as history`() {
+        val body = """{"content":[{"type":"thinking","thinking":"reasoning...","signature":"abc123"}]}"""
+        val response = json.decodeFromString<ClaudeResponse>(body)
+        val message = ClaudeMessage(role = "assistant", content = response.content)
+
+        val encoded = json.encodeToString(message)
+
+        assertTrue(
+            "Expected signature to survive re-serialization, got: $encoded",
+            encoded.contains("\"signature\":\"abc123\""),
+        )
+    }
+
+    @Test
     fun `ClaudeMessage serializes a tool_result content block`() {
         val message = ClaudeMessage(
             role = "user",

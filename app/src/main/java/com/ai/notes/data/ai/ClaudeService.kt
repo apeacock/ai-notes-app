@@ -8,7 +8,7 @@ import retrofit2.http.Header
 import retrofit2.http.POST
 
 const val CLAUDE_BASE_URL = "https://api.anthropic.com/"
-const val CLAUDE_MODEL = "claude-sonnet-4-20250514"
+const val CLAUDE_MODEL = "claude-sonnet-5"
 const val CLAUDE_API_VERSION = "2023-06-01"
 
 interface ClaudeService {

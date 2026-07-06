@@ -31,6 +31,16 @@ sealed class ClaudeContentBlock {
         val content: String,
         @SerialName("is_error") val isError: Boolean = false
     ) : ClaudeContentBlock()
+
+    /**
+     * Extended-thinking block some models (e.g. claude-sonnet-5) emit alongside tool_use/text
+     * blocks. `signature` must be preserved and echoed back verbatim when this block is included
+     * in a later request's conversation history — Anthropic's API rejects the request with a 400
+     * if it's dropped, which is what an earlier version of this class did by omitting the field.
+     */
+    @Serializable
+    @SerialName("thinking")
+    data class Thinking(val thinking: String, val signature: String? = null) : ClaudeContentBlock()
 }
 
 @Serializable
