@@ -8,6 +8,7 @@ import com.ai.notes.data.ai.ErrorMapper
 import com.ai.notes.data.ai.model.ClaudeContentBlock
 import com.ai.notes.data.ai.model.ClaudeMessage
 import com.ai.notes.data.ai.model.ClaudeRequest
+import com.ai.notes.data.ai.model.ClaudeThinkingConfig
 import com.ai.notes.data.preferences.ApiKeyManager
 import kotlinx.serialization.json.JsonObject
 
@@ -76,9 +77,10 @@ class ChatRepository(
         repeat(MAX_ITERATIONS) {
             val request = ClaudeRequest(
                 model = CLAUDE_MODEL,
-                maxTokens = 1024,
+                maxTokens = 2000,
                 messages = history,
                 tools = tools,
+                thinking = ClaudeThinkingConfig("disabled"),
             )
             val response = try {
                 claudeService.sendMessage(apiKey, CLAUDE_API_VERSION, request)

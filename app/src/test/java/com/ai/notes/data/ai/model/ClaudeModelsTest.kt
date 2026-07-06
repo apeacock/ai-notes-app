@@ -16,7 +16,8 @@ class ClaudeModelsTest {
         val request = ClaudeRequest(
             model = "claude-sonnet-4-20250514",
             maxTokens = 2000,
-            messages = listOf(ClaudeMessage(role = "user", content = listOf(ClaudeContentBlock.Text("Summarize this"))))
+            messages = listOf(ClaudeMessage(role = "user", content = listOf(ClaudeContentBlock.Text("Summarize this")))),
+            thinking = ClaudeThinkingConfig("disabled"),
         )
 
         val encoded = json.encodeToString(request)
@@ -30,12 +31,37 @@ class ClaudeModelsTest {
         val request = ClaudeRequest(
             model = "claude-sonnet-4-20250514",
             maxTokens = 2000,
-            messages = listOf(ClaudeMessage(role = "user", content = listOf(ClaudeContentBlock.Text("Hi"))))
+            messages = listOf(ClaudeMessage(role = "user", content = listOf(ClaudeContentBlock.Text("Hi")))),
+            thinking = ClaudeThinkingConfig("disabled"),
         )
 
         val encoded = json.encodeToString(request)
 
         assertTrue(!encoded.contains("\"tools\""))
+    }
+
+    @Test
+    fun `ClaudeRequest serializes thinking as disabled`() {
+        val request = ClaudeRequest(
+            model = "claude-sonnet-5",
+            maxTokens = 2000,
+            messages = listOf(ClaudeMessage(role = "user", content = listOf(ClaudeContentBlock.Text("Hi")))),
+            thinking = ClaudeThinkingConfig("disabled"),
+        )
+
+        val encoded = json.encodeToString(request)
+
+        assertTrue(encoded.contains("\"thinking\":{\"type\":\"disabled\"}"))
+    }
+
+    @Test
+    fun `ClaudeResponse deserializes a redacted_thinking content block without failing`() {
+        val body = """{"content":[{"type":"redacted_thinking","data":"opaque"},{"type":"text","text":"Hello"}]}"""
+
+        val response = json.decodeFromString<ClaudeResponse>(body)
+
+        assertEquals("opaque", (response.content[0] as ClaudeContentBlock.RedactedThinking).data)
+        assertEquals("Hello", (response.content[1] as ClaudeContentBlock.Text).text)
     }
 
     @Test
