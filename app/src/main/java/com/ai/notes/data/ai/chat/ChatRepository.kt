@@ -32,7 +32,13 @@ sealed class ChatTurnResult {
         val toolCalls: List<String>,
     ) : ChatTurnResult()
 
-    data class Error(val error: AppError) : ChatTurnResult()
+    /**
+     * [history] is the last structurally valid wire history (every tool_use paired with a
+     * tool_result). Callers must adopt it: after a confirmed tool executes but the follow-up
+     * request fails, the pre-request history ends in an unanswered tool_use, and reusing it
+     * makes every later request fail with a 400.
+     */
+    data class Error(val error: AppError, val history: List<ClaudeMessage>) : ChatTurnResult()
 }
 
 /**
@@ -68,7 +74,7 @@ class ChatRepository(
 
     private suspend fun runLoop(startHistory: List<ClaudeMessage>): ChatTurnResult {
         val apiKey = apiKeyManager.getApiKey()
-        if (apiKey.isNullOrEmpty()) return ChatTurnResult.Error(AppError.InvalidApiKey)
+        if (apiKey.isNullOrEmpty()) return ChatTurnResult.Error(AppError.InvalidApiKey, startHistory)
 
         var history = startHistory
         val toolCallNames = mutableListOf<String>()
@@ -82,15 +88,17 @@ class ChatRepository(
                 tools = tools,
                 thinking = ClaudeThinkingConfig("disabled"),
             )
+            // At every error return below, `history` ends with a user message (the original
+            // text or the previous round's tool results), so it stays valid to resume from.
             val response = try {
                 claudeService.sendMessage(apiKey, CLAUDE_API_VERSION, request)
             } catch (t: Throwable) {
-                return ChatTurnResult.Error(ErrorMapper.mapThrowable(t))
+                return ChatTurnResult.Error(ErrorMapper.mapThrowable(t), history)
             }
             if (!response.isSuccessful) {
-                return ChatTurnResult.Error(ErrorMapper.mapHttpCode(response.code()))
+                return ChatTurnResult.Error(ErrorMapper.mapHttpCode(response.code()), history)
             }
-            val body = response.body() ?: return ChatTurnResult.Error(AppError.UnknownNetwork)
+            val body = response.body() ?: return ChatTurnResult.Error(AppError.UnknownNetwork, history)
             history = history + ClaudeMessage(role = "assistant", content = body.content)
 
             val toolUses = body.content.filterIsInstance<ClaudeContentBlock.ToolUse>()
