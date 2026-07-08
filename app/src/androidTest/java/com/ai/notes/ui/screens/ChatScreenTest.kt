@@ -109,7 +109,7 @@ class ChatScreenTest {
     @Test
     fun errorFromRepositoryShowsSnackbarWithUserMessage() {
         val chatRepository = mockk<ChatRepository>()
-        coEvery { chatRepository.send(any()) } returns ChatTurnResult.Error(AppError.InvalidApiKey)
+        coEvery { chatRepository.send(any()) } returns ChatTurnResult.Error(AppError.InvalidApiKey, emptyList())
         val viewModel = ChatViewModel(chatRepository)
 
         composeTestRule.setContent { ChatScreen(viewModel = viewModel) }

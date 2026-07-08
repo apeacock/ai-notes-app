@@ -6,17 +6,29 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
 class ApiKeyManager(context: Context) {
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
+    private val prefs: SharedPreferences = try {
+        createEncryptedPrefs(context)
+    } catch (e: Exception) {
+        // The prefs file can't be decrypted with this device's Keystore key — typically a file
+        // restored from backup onto a new device, or a corrupted keyset. Without this recovery
+        // the app crashes on every launch. Drop the file and start fresh; the user is prompted
+        // to re-enter their API key.
+        context.deleteSharedPreferences(PREFS_FILE_NAME)
+        createEncryptedPrefs(context)
+    }
 
-    private val prefs: SharedPreferences = EncryptedSharedPreferences.create(
-        context,
-        PREFS_FILE_NAME,
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    private fun createEncryptedPrefs(context: Context): SharedPreferences {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        return EncryptedSharedPreferences.create(
+            context,
+            PREFS_FILE_NAME,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }
 
     fun saveApiKey(key: String) {
         prefs.edit().putString(KEY_API_KEY, key).apply()

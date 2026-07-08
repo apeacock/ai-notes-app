@@ -85,6 +85,10 @@ class ChatViewModel(private val chatRepository: ChatRepository) : ViewModel() {
                 _pendingConfirmation.value = result
             }
             is ChatTurnResult.Error -> {
+                // Adopt the repository's last valid history. After a confirmed tool has already
+                // executed, the old wireHistory ends with an unanswered tool_use block; keeping
+                // it would make every subsequent request fail with a 400.
+                wireHistory = result.history
                 _errorEvent.value = result.error
             }
         }

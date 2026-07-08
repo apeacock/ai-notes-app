@@ -12,6 +12,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import java.net.SocketTimeoutException
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -200,6 +201,33 @@ class ChatRepositoryTest {
 
         assertTrue(result is ChatTurnResult.Done)
         coVerify(exactly = 5) { toolBridge.execute("searchNotes", any()) }
+    }
+
+    @Test
+    fun `resolveConfirmation returns Error carrying the resolved history when the follow-up request fails`() = runTest {
+        val service = mockk<ClaudeService>()
+        coEvery { service.sendMessage(any(), any(), any()) } throws SocketTimeoutException()
+        val toolBridge = mockk<ToolBridge>()
+        coEvery { toolBridge.discoverTools() } returns emptyList()
+        coEvery { toolBridge.execute("deleteNote", any()) } returns ToolExecutionResult.Success("true")
+        val repository = ChatRepository(service, apiKeyManager(), toolBridge)
+        val pending = PendingToolUse("t1", "deleteNote", JsonObject(mapOf("noteId" to JsonPrimitive(5))))
+        val history = listOf(
+            ClaudeMessage("user", listOf(ClaudeContentBlock.Text("delete note 5"))),
+            ClaudeMessage("assistant", listOf(ClaudeContentBlock.ToolUse("t1", "deleteNote", JsonObject(emptyMap())))),
+        )
+
+        val result = repository.resolveConfirmation(history, pending, emptyList(), approved = true)
+
+        // The tool already ran; the error history must pair its tool_use with a tool_result so
+        // the conversation stays resumable instead of 400ing on every later request.
+        assertTrue(result is ChatTurnResult.Error)
+        result as ChatTurnResult.Error
+        assertEquals(AppError.Timeout, result.error)
+        val lastMessage = result.history.last()
+        assertEquals("user", lastMessage.role)
+        val toolResult = lastMessage.content.single() as ClaudeContentBlock.ToolResult
+        assertEquals("t1", toolResult.toolUseId)
     }
 
     @Test
