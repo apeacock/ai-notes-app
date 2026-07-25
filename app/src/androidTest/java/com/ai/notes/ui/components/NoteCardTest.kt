@@ -208,7 +208,7 @@ class NoteCardTest {
 
         composeTestRule.onNodeWithTag("note_card_1").performTouchInput {
             down(center)
-            moveTo(center.copy(x = center.x - 350f))
+            moveTo(center.copy(x = center.x - 550f))
         }
 
         composeTestRule.onNodeWithTag("note_card_delete_indicator_1").assertExists()

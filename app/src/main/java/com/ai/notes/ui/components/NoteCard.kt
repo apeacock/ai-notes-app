@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.ai.notes.data.model.Note
 import kotlin.math.abs
 
-private const val SWIPE_DELETE_THRESHOLD_PX = 300f
+private const val SWIPE_DELETE_THRESHOLD_PX = 450f
 
 @Composable
 fun NoteCard(
