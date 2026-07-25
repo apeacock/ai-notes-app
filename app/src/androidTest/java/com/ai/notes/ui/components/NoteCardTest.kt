@@ -9,7 +9,9 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.center
-import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.down
+import androidx.compose.ui.test.moveTo
+import androidx.compose.ui.test.up
 import com.ai.notes.data.model.Note
 import org.junit.Rule
 import org.junit.Test
@@ -179,11 +181,14 @@ class NoteCardTest {
         }
 
         composeTestRule.onNodeWithTag("note_card_1").performTouchInput {
-            swipe(start = center, end = center.copy(x = center.x - 100f), durationMillis = 200)
+            down(center)
+            moveTo(center.copy(x = center.x - 100f))
         }
 
         composeTestRule.onNodeWithTag("note_card_delete_indicator_1").assertExists()
         composeTestRule.onNodeWithContentDescription("Delete indicator active").assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag("note_card_1").performTouchInput { up() }
     }
 
     @Test
@@ -200,10 +205,13 @@ class NoteCardTest {
         }
 
         composeTestRule.onNodeWithTag("note_card_1").performTouchInput {
-            swipe(start = center, end = center.copy(x = center.x - 350f), durationMillis = 200)
+            down(center)
+            moveTo(center.copy(x = center.x - 350f))
         }
 
         composeTestRule.onNodeWithTag("note_card_delete_indicator_1").assertExists()
         composeTestRule.onNodeWithContentDescription("Delete indicator active").assertExists()
+
+        composeTestRule.onNodeWithTag("note_card_1").performTouchInput { up() }
     }
 }
