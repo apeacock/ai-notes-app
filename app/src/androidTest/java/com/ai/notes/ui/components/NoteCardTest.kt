@@ -189,6 +189,8 @@ class NoteCardTest {
         composeTestRule.onNodeWithContentDescription("Delete indicator active").assertDoesNotExist()
 
         composeTestRule.onNodeWithTag("note_card_1").performTouchInput { up() }
+
+        composeTestRule.onNodeWithTag("note_card_delete_indicator_1").assertDoesNotExist()
     }
 
     @Test
@@ -213,5 +215,7 @@ class NoteCardTest {
         composeTestRule.onNodeWithContentDescription("Delete indicator active").assertExists()
 
         composeTestRule.onNodeWithTag("note_card_1").performTouchInput { up() }
+
+        composeTestRule.onNodeWithTag("note_card_delete_indicator_1").assertDoesNotExist()
     }
 }

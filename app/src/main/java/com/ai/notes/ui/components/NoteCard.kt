@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -73,14 +74,14 @@ fun NoteCard(
                 modifier = Modifier
                     .matchParentSize()
                     .padding(8.dp)
-                    .background(backgroundColor)
+                    .background(backgroundColor, shape = CardDefaults.shape)
                     .testTag("note_card_delete_indicator_${note.id}"),
                 contentAlignment = Alignment.CenterEnd
             ) {
                 Icon(
                     imageVector = Icons.Filled.Delete,
                     contentDescription = if (isPastDeleteThreshold) "Delete indicator active" else null,
-                    tint = iconColor.copy(alpha = if (isPastDeleteThreshold) 1f else iconAlpha),
+                    tint = iconColor.copy(alpha = iconAlpha),
                     modifier = Modifier.padding(end = 24.dp)
                 )
             }
@@ -103,7 +104,7 @@ fun NoteCard(
                     orientation = Orientation.Horizontal,
                     state = rememberDraggableState { delta ->
                         dragOffset += delta
-                        if (!deleteTriggeredThisGesture && dragOffset < -SWIPE_DELETE_THRESHOLD_PX) {
+                        if (!deleteTriggeredThisGesture && dragOffset <= -SWIPE_DELETE_THRESHOLD_PX) {
                             deleteTriggeredThisGesture = true
                             hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                             onSwipeToDelete()
