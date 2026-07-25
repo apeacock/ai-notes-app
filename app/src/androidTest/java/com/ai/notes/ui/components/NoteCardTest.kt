@@ -7,6 +7,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.center
+import androidx.compose.ui.test.swipe
 import com.ai.notes.data.model.Note
 import org.junit.Rule
 import org.junit.Test
@@ -144,5 +147,63 @@ class NoteCardTest {
         }
 
         composeTestRule.onNodeWithTag("note_card_checkmark_1").assertExists()
+    }
+
+    @Test
+    fun noDragShowsNoDeleteIndicator() {
+        composeTestRule.setContent {
+            NoteCard(
+                note = sampleNote,
+                isSelected = false,
+                isMultiSelectMode = false,
+                onClick = {},
+                onLongPress = {},
+                onSwipeToDelete = {}
+            )
+        }
+
+        composeTestRule.onNodeWithTag("note_card_delete_indicator_1").assertDoesNotExist()
+    }
+
+    @Test
+    fun partialSwipeShowsIndicatorWithoutActiveState() {
+        composeTestRule.setContent {
+            NoteCard(
+                note = sampleNote,
+                isSelected = false,
+                isMultiSelectMode = false,
+                onClick = {},
+                onLongPress = {},
+                onSwipeToDelete = {}
+            )
+        }
+
+        composeTestRule.onNodeWithTag("note_card_1").performTouchInput {
+            swipe(start = center, end = center.copy(x = center.x - 100f), durationMillis = 200)
+        }
+
+        composeTestRule.onNodeWithTag("note_card_delete_indicator_1").assertExists()
+        composeTestRule.onNodeWithContentDescription("Delete indicator active").assertDoesNotExist()
+    }
+
+    @Test
+    fun swipePastThresholdShowsActiveIndicator() {
+        composeTestRule.setContent {
+            NoteCard(
+                note = sampleNote,
+                isSelected = false,
+                isMultiSelectMode = false,
+                onClick = {},
+                onLongPress = {},
+                onSwipeToDelete = {}
+            )
+        }
+
+        composeTestRule.onNodeWithTag("note_card_1").performTouchInput {
+            swipe(start = center, end = center.copy(x = center.x - 350f), durationMillis = 200)
+        }
+
+        composeTestRule.onNodeWithTag("note_card_delete_indicator_1").assertExists()
+        composeTestRule.onNodeWithContentDescription("Delete indicator active").assertExists()
     }
 }

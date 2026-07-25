@@ -6,13 +6,16 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -23,7 +26,9 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -31,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.ai.notes.data.model.Note
+import kotlin.math.abs
 
 private const val SWIPE_DELETE_THRESHOLD_PX = 300f
 
@@ -50,69 +56,101 @@ fun NoteCard(
     // lifting, the delta callback would re-cross -SWIPE_DELETE_THRESHOLD_PX repeatedly.
     var deleteTriggeredThisGesture by remember { mutableStateOf(false) }
     val hapticFeedback = LocalHapticFeedback.current
+    val isPastDeleteThreshold = dragOffset <= -SWIPE_DELETE_THRESHOLD_PX
 
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(8.dp)
-            .offset { IntOffset(dragOffset.toInt(), 0) }
-            .testTag("note_card_${note.id}")
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onLongPress()
-                }
-            )
-            .draggable(
-                orientation = Orientation.Horizontal,
-                state = rememberDraggableState { delta ->
-                    dragOffset += delta
-                    if (!deleteTriggeredThisGesture && dragOffset < -SWIPE_DELETE_THRESHOLD_PX) {
-                        deleteTriggeredThisGesture = true
-                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onSwipeToDelete()
-                    }
-                },
-                onDragStarted = { deleteTriggeredThisGesture = false },
-                onDragStopped = {
-                    dragOffset = 0f
-                    deleteTriggeredThisGesture = false
-                }
-            )
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+    Box(modifier = modifier.fillMaxWidth()) {
+        if (dragOffset < 0) {
+            val iconAlpha = (abs(dragOffset) / SWIPE_DELETE_THRESHOLD_PX).coerceIn(0f, 1f)
+            val backgroundColor = if (isPastDeleteThreshold) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.errorContainer
+            }
+            val iconColor = if (isPastDeleteThreshold) {
+                MaterialTheme.colorScheme.onError
+            } else {
+                MaterialTheme.colorScheme.onErrorContainer
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp)
+                    .background(backgroundColor)
+                    .testTag("note_card_delete_indicator_${note.id}"),
+                contentAlignment = Alignment.CenterEnd
             ) {
-                Text(text = note.title, style = MaterialTheme.typography.titleMedium)
-                if (isMultiSelectMode && isSelected) {
-                    Icon(
-                        imageVector = Icons.Filled.CheckCircle,
-                        contentDescription = "Selected",
-                        modifier = Modifier.testTag("note_card_checkmark_${note.id}")
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = if (isPastDeleteThreshold) "Delete indicator active" else null,
+                    tint = iconColor.copy(alpha = if (isPastDeleteThreshold) 1f else iconAlpha),
+                    modifier = Modifier.padding(end = 24.dp)
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+                .offset { IntOffset(dragOffset.toInt(), 0) }
+                .testTag("note_card_${note.id}")
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onLongPress()
+                    }
+                )
+                .draggable(
+                    orientation = Orientation.Horizontal,
+                    state = rememberDraggableState { delta ->
+                        dragOffset += delta
+                        if (!deleteTriggeredThisGesture && dragOffset < -SWIPE_DELETE_THRESHOLD_PX) {
+                            deleteTriggeredThisGesture = true
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onSwipeToDelete()
+                        }
+                    },
+                    onDragStarted = { deleteTriggeredThisGesture = false },
+                    onDragStopped = {
+                        dragOffset = 0f
+                        deleteTriggeredThisGesture = false
+                    }
+                )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = note.title, style = MaterialTheme.typography.titleMedium)
+                    if (isMultiSelectMode && isSelected) {
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = "Selected",
+                            modifier = Modifier.testTag("note_card_checkmark_${note.id}")
+                        )
+                    }
+                }
+                Text(
+                    text = note.body,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (note.tags.isNotEmpty()) {
+                    Text(
+                        text = note.tags.joinToString(separator = " ") { "#$it" },
+                        style = MaterialTheme.typography.labelSmall
                     )
                 }
-            }
-            Text(
-                text = note.body,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            if (note.tags.isNotEmpty()) {
-                Text(
-                    text = note.tags.joinToString(separator = " ") { "#$it" },
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-            if (note.category != null) {
-                Text(
-                    text = note.category,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.testTag("note_card_category_${note.id}")
-                )
+                if (note.category != null) {
+                    Text(
+                        text = note.category,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.testTag("note_card_category_${note.id}")
+                    )
+                }
             }
         }
     }
