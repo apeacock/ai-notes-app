@@ -57,4 +57,11 @@ class ErrorMapperTest {
     fun `maps unknown throwable to UnknownNetwork`() {
         assertTrue(ErrorMapper.mapThrowable(RuntimeException("boom")) is AppError.UnknownNetwork)
     }
+
+    @Test
+    fun `ServerError range is exactly 500 through 599`() {
+        assertEquals(AppError.UnknownNetwork, ErrorMapper.mapHttpCode(499))
+        assertEquals(AppError.ServerError, ErrorMapper.mapHttpCode(599))
+        assertEquals(AppError.UnknownNetwork, ErrorMapper.mapHttpCode(600))
+    }
 }

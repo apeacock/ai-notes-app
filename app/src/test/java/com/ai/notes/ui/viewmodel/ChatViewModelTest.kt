@@ -11,6 +11,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -21,6 +22,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -175,5 +177,128 @@ class ChatViewModelTest {
         dispatcher.scheduler.advanceUntilIdle()
 
         coVerify(exactly = 1) { repository.resolveConfirmation(any(), pending, emptyList(), false) }
+    }
+
+    private val pending = PendingToolUse("t1", "deleteNote", JsonObject(mapOf("noteId" to JsonPrimitive(5))))
+    private fun msg(role: String, text: String) = ClaudeMessage(role, listOf(ClaudeContentBlock.Text(text)))
+
+    @Test
+    fun `sendMessage shows loading until the repository answers`() = runTest {
+        val repository = mockk<ChatRepository>()
+        val answer = CompletableDeferred<ChatTurnResult>()
+        coEvery { repository.send(any()) } coAnswers { answer.await() }
+        val vm = ChatViewModel(repository)
+
+        vm.sendMessage("Hello")
+        dispatcher.scheduler.advanceUntilIdle()
+        assertTrue(vm.isLoading.value)
+
+        answer.complete(ChatTurnResult.Done(emptyList(), "Hi", emptyList()))
+        dispatcher.scheduler.advanceUntilIdle()
+        assertFalse(vm.isLoading.value)
+    }
+
+    @Test
+    fun `sendMessage sends the user text as a new wire message`() = runTest {
+        val repository = mockk<ChatRepository>()
+        val sent = slot<List<ClaudeMessage>>()
+        coEvery { repository.send(capture(sent)) } returns ChatTurnResult.Done(emptyList(), "Hi", emptyList())
+        val vm = ChatViewModel(repository)
+
+        vm.sendMessage("Hello")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(listOf(msg("user", "Hello")), sent.captured)
+    }
+
+    @Test
+    fun `a Done result's history becomes the base for the next message`() = runTest {
+        val repository = mockk<ChatRepository>()
+        val doneHistory = listOf(msg("user", "Hello"), msg("assistant", "Hi"))
+        val sent = mutableListOf<List<ClaudeMessage>>()
+        coEvery { repository.send(capture(sent)) } returns ChatTurnResult.Done(doneHistory, "Hi", emptyList())
+        val vm = ChatViewModel(repository)
+
+        vm.sendMessage("Hello")
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.sendMessage("Again")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(doneHistory + msg("user", "Again"), sent[1])
+    }
+
+    @Test
+    fun `NeedsConfirmation shows tool activity and confirms against the returned history`() = runTest {
+        val repository = mockk<ChatRepository>()
+        val confirmHistory = listOf(msg("user", "delete note 5"), msg("assistant", "on it"))
+        val resolved = listOf(ClaudeContentBlock.ToolResult("t0", "[5]"))
+        coEvery { repository.send(any()) } returns
+            ChatTurnResult.NeedsConfirmation(confirmHistory, pending, resolved, listOf("searchNotes", "deleteNote"))
+        coEvery { repository.resolveConfirmation(any(), any(), any(), any()) } returns
+            ChatTurnResult.Done(emptyList(), "Deleted.", emptyList())
+        val vm = ChatViewModel(repository)
+        vm.sendMessage("delete note 5")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(
+            listOf(
+                ChatMessage.FromUser("delete note 5"),
+                ChatMessage.ToolActivity("searchNotes"),
+                ChatMessage.ToolActivity("deleteNote"),
+            ),
+            vm.messages.value,
+        )
+
+        vm.confirmPendingAction()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        coVerify(exactly = 1) { repository.resolveConfirmation(confirmHistory, pending, resolved, true) }
+    }
+
+    @Test
+    fun `confirming with nothing pending does nothing`() = runTest {
+        val repository = mockk<ChatRepository>()
+        val vm = ChatViewModel(repository)
+
+        vm.confirmPendingAction()
+        vm.cancelPendingAction()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        coVerify(exactly = 0) { repository.resolveConfirmation(any(), any(), any(), any()) }
+        assertFalse(vm.isLoading.value)
+    }
+
+    @Test
+    fun `resolving a confirmation shows loading until the repository answers`() = runTest {
+        val repository = mockk<ChatRepository>()
+        coEvery { repository.send(any()) } returns
+            ChatTurnResult.NeedsConfirmation(emptyList(), pending, emptyList(), listOf("deleteNote"))
+        val answer = CompletableDeferred<ChatTurnResult>()
+        coEvery { repository.resolveConfirmation(any(), any(), any(), any()) } coAnswers { answer.await() }
+        val vm = ChatViewModel(repository)
+        vm.sendMessage("delete note 5")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        vm.confirmPendingAction()
+        dispatcher.scheduler.advanceUntilIdle()
+        assertTrue(vm.isLoading.value)
+        assertNull(vm.pendingConfirmation.value)
+
+        answer.complete(ChatTurnResult.Done(emptyList(), "Deleted.", emptyList()))
+        dispatcher.scheduler.advanceUntilIdle()
+        assertFalse(vm.isLoading.value)
+    }
+
+    @Test
+    fun `dismissError clears the error`() = runTest {
+        val repository = mockk<ChatRepository>()
+        coEvery { repository.send(any()) } returns ChatTurnResult.Error(AppError.Timeout, emptyList())
+        val vm = ChatViewModel(repository)
+        vm.sendMessage("Hello")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        vm.dismissError()
+
+        assertNull(vm.errorEvent.value)
     }
 }

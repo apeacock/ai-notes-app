@@ -6,9 +6,12 @@ import com.ai.notes.data.ai.SummarizeResult
 import com.ai.notes.data.database.repositories.NoteRepository
 import com.ai.notes.data.model.Note
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +23,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -235,5 +239,198 @@ class NotesViewModelTest {
         assertEquals(searchResults, vm.notes.value)
 
         collectorJob.cancel()
+    }
+
+    private fun repoWith(all: List<Note>, search: List<Note> = all): NoteRepository = mockk<NoteRepository>().also {
+        every { it.getAllNotes() } returns MutableStateFlow(all)
+        every { it.searchNotes(any()) } returns MutableStateFlow(search)
+    }
+
+    private fun NotesViewModel.select(vararg ids: Int) {
+        enterMultiSelectMode()
+        ids.forEach { toggleSelection(it) }
+    }
+
+    @Test
+    fun `summarizeSelected takes the notes from the active search, not the full list`() = runTest {
+        val noteRepository = repoWith(all = listOf(note(1), note(2)), search = listOf(note(3), note(4)))
+        val summarizationRepository = mockk<SummarizationRepository>()
+        val captured = slot<List<Note>>()
+        coEvery { summarizationRepository.summarize(capture(captured)) } returns SummarizeResult.Success("S")
+        val vm = NotesViewModel(noteRepository, summarizationRepository)
+
+        vm.onSearchQueryChanged("milk")
+        vm.select(1, 3, 4)
+        vm.summarizeSelected()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(listOf(note(3), note(4)), captured.captured)
+        verify { noteRepository.searchNotes("milk") }
+    }
+
+    @Test
+    fun `summarizeSelected ignores a whitespace-only query and uses all notes`() = runTest {
+        val noteRepository = repoWith(all = listOf(note(1), note(2)), search = emptyList())
+        val summarizationRepository = mockk<SummarizationRepository>()
+        val captured = slot<List<Note>>()
+        coEvery { summarizationRepository.summarize(capture(captured)) } returns SummarizeResult.Success("S")
+        val vm = NotesViewModel(noteRepository, summarizationRepository)
+
+        vm.onSearchQueryChanged("   ")
+        vm.select(1, 2)
+        vm.summarizeSelected()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(listOf(note(1), note(2)), captured.captured)
+    }
+
+    @Test
+    fun `summarizeSelected surfaces a summarization Failure as the error`() = runTest {
+        val summarizationRepository = mockk<SummarizationRepository>()
+        coEvery { summarizationRepository.summarize(any()) } returns SummarizeResult.Failure(AppError.RateLimited)
+        val vm = NotesViewModel(repoWith(listOf(note(1), note(2))), summarizationRepository)
+
+        vm.select(1, 2)
+        vm.summarizeSelected()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(AppError.RateLimited, vm.errorEvent.value)
+        assertNull(vm.summary.value)
+    }
+
+    @Test
+    fun `summarizeSelected shows loading until the summary arrives`() = runTest {
+        val summarizationRepository = mockk<SummarizationRepository>()
+        val answer = CompletableDeferred<SummarizeResult>()
+        coEvery { summarizationRepository.summarize(any()) } coAnswers { answer.await() }
+        val vm = NotesViewModel(repoWith(listOf(note(1), note(2))), summarizationRepository)
+        vm.select(1, 2)
+
+        vm.summarizeSelected()
+        dispatcher.scheduler.advanceUntilIdle()
+        assertTrue(vm.isLoading.value)
+
+        answer.complete(SummarizeResult.Success("S"))
+        dispatcher.scheduler.advanceUntilIdle()
+        assertFalse(vm.isLoading.value)
+    }
+
+    @Test
+    fun `summarizeSelected reports the database failure message and stops loading`() = runTest {
+        val noteRepository = mockk<NoteRepository>()
+        every { noteRepository.getAllNotes() } throws IllegalStateException("db closed")
+        val vm = NotesViewModel(noteRepository, mockk())
+        vm.select(1, 2)
+
+        vm.summarizeSelected()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(AppError.DatabaseError("db closed"), vm.errorEvent.value)
+        assertFalse(vm.isLoading.value)
+    }
+
+    @Test
+    fun `summarizeSelected rejects more than ten notes without loading`() = runTest {
+        val vm = NotesViewModel(repoWith((1..11).map { note(it) }), mockk())
+        vm.select(*(1..11).toList().toIntArray())
+
+        vm.summarizeSelected()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(vm.canSummarize())
+        assertEquals(AppError.BatchTooLarge, vm.errorEvent.value)
+        assertFalse(vm.isLoading.value)
+    }
+
+    @Test
+    fun `canSummarize allows exactly ten notes`() = runTest {
+        val vm = NotesViewModel(repoWith((1..10).map { note(it) }), mockk())
+        vm.select(*(1..10).toList().toIntArray())
+
+        assertTrue(vm.canSummarize())
+    }
+
+    @Test
+    fun `dismissSummary and dismissError clear their state`() = runTest {
+        val summarizationRepository = mockk<SummarizationRepository>()
+        coEvery { summarizationRepository.summarize(any()) } returns SummarizeResult.Success("S")
+        val vm = NotesViewModel(repoWith(listOf(note(1), note(2))), summarizationRepository)
+        vm.select(1)
+        vm.summarizeSelected()
+        vm.select(2)
+        vm.summarizeSelected()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        vm.dismissSummary()
+        vm.dismissError()
+
+        assertNull(vm.summary.value)
+        assertNull(vm.errorEvent.value)
+    }
+
+    @Test
+    fun `createNote, updateNote and deleteNote forward to the repository without error`() = runTest {
+        val noteRepository = repoWith(emptyList())
+        coEvery { noteRepository.createNote(any(), any(), any(), any()) } returns note(9)
+        coEvery { noteRepository.updateNote(any()) } returns Unit
+        coEvery { noteRepository.deleteNote(any()) } returns Unit
+        val vm = NotesViewModel(noteRepository, mockk())
+
+        vm.createNote("T", "B", listOf("x"), "C")
+        vm.updateNote(note(4))
+        vm.deleteNote(7)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        coVerify(exactly = 1) { noteRepository.createNote("T", "B", listOf("x"), "C") }
+        coVerify(exactly = 1) { noteRepository.updateNote(note(4)) }
+        coVerify(exactly = 1) { noteRepository.deleteNote(7) }
+        assertNull(vm.errorEvent.value)
+    }
+
+    @Test
+    fun `write failures report the exception message, or a fallback when there is none`() = runTest {
+        val noteRepository = repoWith(emptyList())
+        coEvery { noteRepository.createNote(any(), any(), any(), any()) } throws RuntimeException("disk full")
+        coEvery { noteRepository.updateNote(any()) } throws RuntimeException()
+        coEvery { noteRepository.deleteNote(any()) } throws RuntimeException("locked")
+        val vm = NotesViewModel(noteRepository, mockk())
+
+        vm.createNote("T", "B", emptyList(), null)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(AppError.DatabaseError("disk full"), vm.errorEvent.value)
+
+        vm.updateNote(note(1))
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(AppError.DatabaseError("Unknown database error"), vm.errorEvent.value)
+
+        vm.deleteNote(1)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(AppError.DatabaseError("locked"), vm.errorEvent.value)
+    }
+
+    @Test
+    fun `every database failure without a message falls back to a generic detail`() = runTest {
+        val noteRepository = mockk<NoteRepository>()
+        every { noteRepository.getAllNotes() } throws IllegalStateException()
+        every { noteRepository.searchNotes(any()) } throws IllegalStateException()
+        coEvery { noteRepository.createNote(any(), any(), any(), any()) } throws RuntimeException()
+        coEvery { noteRepository.deleteNote(any()) } throws RuntimeException()
+        val vm = NotesViewModel(noteRepository, mockk())
+        val fallback = AppError.DatabaseError("Unknown database error")
+
+        vm.select(1, 2)
+        vm.summarizeSelected()
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(fallback, vm.errorEvent.value)
+
+        vm.dismissError()
+        vm.createNote("T", "B", emptyList(), null)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(fallback, vm.errorEvent.value)
+
+        vm.dismissError()
+        vm.deleteNote(1)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(fallback, vm.errorEvent.value)
     }
 }

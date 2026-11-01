@@ -98,4 +98,16 @@ class NoteFunctionsTest {
 
         assertFalse(functions.deleteNote(fakeContext, 9999))
     }
+
+    @Test
+    fun `deleteNote removes only the requested note`() = runTest {
+        val functions = NoteFunctions(NoteRepository(FakeNoteDao()))
+        val keep = functions.createNote(fakeContext, "Keep", "Body", emptyList(), null)
+        val drop = functions.createNote(fakeContext, "Drop", "Body", emptyList(), null)
+
+        functions.deleteNote(fakeContext, drop.id)
+
+        assertEquals(keep, functions.getNote(fakeContext, keep.id))
+        assertNull(functions.getNote(fakeContext, drop.id))
+    }
 }

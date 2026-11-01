@@ -18,6 +18,7 @@ androidxTestExtJunit = "1.2.1"
 espresso = "3.7.0"
 kotlinxCoroutinesTest = "1.9.0"
 mockk = "1.13.13"
+pitestPlugin = "0.3.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -56,3 +57,4 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+pitest = { id = "pl.droidsonroids.pitest", version.ref = "pitestPlugin" }

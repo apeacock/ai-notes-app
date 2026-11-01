@@ -1,11 +1,15 @@
 package com.ai.notes.data.ai.chat
 
 import com.ai.notes.data.ai.AppError
+import com.ai.notes.data.ai.CLAUDE_API_VERSION
+import com.ai.notes.data.ai.CLAUDE_MODEL
 import com.ai.notes.data.ai.ClaudeService
 import com.ai.notes.data.ai.model.ClaudeContentBlock
 import com.ai.notes.data.ai.model.ClaudeMessage
 import com.ai.notes.data.ai.model.ClaudeRequest
 import com.ai.notes.data.ai.model.ClaudeResponse
+import com.ai.notes.data.ai.model.ClaudeThinkingConfig
+import com.ai.notes.data.ai.model.ClaudeTool
 import com.ai.notes.data.preferences.ApiKeyManager
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -16,7 +20,11 @@ import java.net.SocketTimeoutException
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
@@ -238,5 +246,230 @@ class ChatRepositoryTest {
 
         assertTrue(result is ChatTurnResult.Error)
         assertEquals(AppError.InvalidApiKey, (result as ChatTurnResult.Error).error)
+    }
+
+    private fun user(text: String) = ClaudeMessage("user", listOf(ClaudeContentBlock.Text(text)))
+
+    private fun noTools(): ToolBridge = mockk<ToolBridge>().also { coEvery { it.discoverTools() } returns emptyList() }
+
+    private fun httpError(code: Int) =
+        Response.error<ClaudeResponse>(code, "{}".toResponseBody("application/json".toMediaType()))
+
+    @Test
+    fun `send treats an empty stored key as missing and keeps the history`() = runTest {
+        val service = mockk<ClaudeService>()
+        val history = listOf(user("hi"))
+
+        val result = ChatRepository(service, apiKeyManager(""), mockk()).send(history)
+
+        assertEquals(ChatTurnResult.Error(AppError.InvalidApiKey, history), result)
+        coVerify(exactly = 0) { service.sendMessage(any(), any(), any()) }
+    }
+
+    @Test
+    fun `send builds the request from the stored key, model, history and discovered tools`() = runTest {
+        val service = mockk<ClaudeService>()
+        val request = slot<ClaudeRequest>()
+        coEvery { service.sendMessage("sk-ant-key", CLAUDE_API_VERSION, capture(request)) } returns textResponse("ok")
+        val tools = listOf(ClaudeTool("searchNotes", "Search.", JsonObject(emptyMap())))
+        val toolBridge = mockk<ToolBridge>()
+        coEvery { toolBridge.discoverTools() } returns tools
+        val history = listOf(user("hi"))
+
+        ChatRepository(service, apiKeyManager(), toolBridge).send(history)
+
+        assertEquals(
+            ClaudeRequest(
+                model = CLAUDE_MODEL,
+                maxTokens = 2000,
+                messages = history,
+                tools = tools,
+                thinking = ClaudeThinkingConfig("disabled"),
+            ),
+            request.captured,
+        )
+    }
+
+    @Test
+    fun `send omits the tools field when no tools are discovered`() = runTest {
+        val service = mockk<ClaudeService>()
+        val request = slot<ClaudeRequest>()
+        coEvery { service.sendMessage(any(), any(), capture(request)) } returns textResponse("ok")
+
+        ChatRepository(service, apiKeyManager(), noTools()).send(listOf(user("hi")))
+
+        assertNull(request.captured.tools)
+    }
+
+    @Test
+    fun `send returns Done with the history extended by the assistant reply`() = runTest {
+        val service = mockk<ClaudeService>()
+        coEvery { service.sendMessage(any(), any(), any()) } returns textResponse("Hello!")
+        val history = listOf(user("hi"))
+
+        val result = ChatRepository(service, apiKeyManager(), noTools()).send(history)
+
+        assertEquals(
+            ChatTurnResult.Done(
+                history = history + ClaudeMessage("assistant", listOf(ClaudeContentBlock.Text("Hello!"))),
+                reply = "Hello!",
+                toolCalls = emptyList(),
+            ),
+            result,
+        )
+    }
+
+    @Test
+    fun `send joins multiple text blocks with newlines`() = runTest {
+        val service = mockk<ClaudeService>()
+        coEvery { service.sendMessage(any(), any(), any()) } returns Response.success(
+            ClaudeResponse(
+                content = listOf(ClaudeContentBlock.Text("One"), ClaudeContentBlock.Text("Two")),
+                stopReason = "end_turn",
+            )
+        )
+
+        val result = ChatRepository(service, apiKeyManager(), noTools()).send(listOf(user("hi")))
+
+        assertEquals("One\nTwo", (result as ChatTurnResult.Done).reply)
+    }
+
+    @Test
+    fun `send maps an HTTP error and keeps the pre-request history`() = runTest {
+        val service = mockk<ClaudeService>()
+        coEvery { service.sendMessage(any(), any(), any()) } returns httpError(429)
+        val history = listOf(user("hi"))
+
+        val result = ChatRepository(service, apiKeyManager(), noTools()).send(history)
+
+        assertEquals(ChatTurnResult.Error(AppError.RateLimited, history), result)
+    }
+
+    @Test
+    fun `send returns UnknownNetwork when a successful response has no body`() = runTest {
+        val service = mockk<ClaudeService>()
+        coEvery { service.sendMessage(any(), any(), any()) } returns Response.success<ClaudeResponse>(null)
+        val history = listOf(user("hi"))
+
+        val result = ChatRepository(service, apiKeyManager(), noTools()).send(history)
+
+        assertEquals(ChatTurnResult.Error(AppError.UnknownNetwork, history), result)
+    }
+
+    @Test
+    fun `send does not run tool_use blocks unless the stop reason is tool_use`() = runTest {
+        val service = mockk<ClaudeService>()
+        coEvery { service.sendMessage(any(), any(), any()) } returns Response.success(
+            ClaudeResponse(
+                content = listOf(
+                    ClaudeContentBlock.Text("Done."),
+                    ClaudeContentBlock.ToolUse("t1", "searchNotes", JsonObject(emptyMap())),
+                ),
+                stopReason = "end_turn",
+            )
+        )
+        val toolBridge = noTools()
+
+        val result = ChatRepository(service, apiKeyManager(), toolBridge).send(listOf(user("hi")))
+
+        assertEquals("Done.", (result as ChatTurnResult.Done).reply)
+        assertEquals(emptyList<String>(), result.toolCalls)
+        coVerify(exactly = 0) { toolBridge.execute(any(), any()) }
+    }
+
+    @Test
+    fun `send finishes when the stop reason is tool_use but no tool_use block exists`() = runTest {
+        val service = mockk<ClaudeService>()
+        coEvery { service.sendMessage(any(), any(), any()) } returns Response.success(
+            ClaudeResponse(content = listOf(ClaudeContentBlock.Text("Hm.")), stopReason = "tool_use")
+        )
+
+        val result = ChatRepository(service, apiKeyManager(), noTools()).send(listOf(user("hi")))
+
+        assertEquals("Hm.", (result as ChatTurnResult.Done).reply)
+        coVerify(exactly = 1) { service.sendMessage(any(), any(), any()) }
+    }
+
+    @Test
+    fun `send feeds a successful tool result back as a non-error tool_result`() = runTest {
+        val service = mockk<ClaudeService>()
+        val requests = mutableListOf<ClaudeRequest>()
+        coEvery { service.sendMessage(any(), any(), capture(requests)) } returnsMany listOf(
+            toolUseResponse("t1", "searchNotes"),
+            textResponse("Found it."),
+        )
+        val toolBridge = noTools()
+        coEvery { toolBridge.execute("searchNotes", any()) } returns ToolExecutionResult.Success("[{\"id\":1}]")
+
+        ChatRepository(service, apiKeyManager(), toolBridge).send(listOf(user("find")))
+
+        assertEquals(
+            ClaudeMessage("user", listOf(ClaudeContentBlock.ToolResult("t1", "[{\"id\":1}]", isError = false))),
+            requests[1].messages.last(),
+        )
+        assertFalse((requests[1].messages.last().content.single() as ClaudeContentBlock.ToolResult).isError)
+    }
+
+    @Test
+    fun `send runs the other tools of a destructive turn and holds only the destructive one`() = runTest {
+        val service = mockk<ClaudeService>()
+        val searchInput = JsonObject(mapOf("query" to JsonPrimitive("milk")))
+        val deleteInput = JsonObject(mapOf("noteId" to JsonPrimitive(5)))
+        val assistantBlocks = listOf(
+            ClaudeContentBlock.ToolUse("t1", "searchNotes", searchInput),
+            ClaudeContentBlock.ToolUse("t2", "deleteNote", deleteInput),
+        )
+        coEvery { service.sendMessage(any(), any(), any()) } returns
+            Response.success(ClaudeResponse(content = assistantBlocks, stopReason = "tool_use"))
+        val toolBridge = noTools()
+        coEvery { toolBridge.execute("searchNotes", searchInput) } returns ToolExecutionResult.Success("[5]")
+        val history = listOf(user("find milk and delete it"))
+
+        val result = ChatRepository(service, apiKeyManager(), toolBridge).send(history)
+
+        assertEquals(
+            ChatTurnResult.NeedsConfirmation(
+                history = history + ClaudeMessage("assistant", assistantBlocks),
+                pending = PendingToolUse("t2", "deleteNote", deleteInput),
+                resolvedResults = listOf(ClaudeContentBlock.ToolResult("t1", "[5]")),
+                toolCalls = listOf("searchNotes", "deleteNote"),
+            ),
+            result,
+        )
+        coVerify(exactly = 0) { toolBridge.execute("deleteNote", any()) }
+    }
+
+    @Test
+    fun `send gives up with an apology after five tool rounds`() = runTest {
+        val service = mockk<ClaudeService>()
+        coEvery { service.sendMessage(any(), any(), any()) } returns toolUseResponse("t1", "searchNotes")
+        val toolBridge = noTools()
+        coEvery { toolBridge.execute("searchNotes", any()) } returns ToolExecutionResult.Success("[]")
+
+        val result = ChatRepository(service, apiKeyManager(), toolBridge).send(listOf(user("loop")))
+
+        result as ChatTurnResult.Done
+        assertEquals("Sorry, I couldn't resolve that.", result.reply)
+        assertEquals(List(5) { "searchNotes" }, result.toolCalls)
+        assertEquals(1 + 5 * 2, result.history.size)
+        coVerify(exactly = 5) { service.sendMessage(any(), any(), any()) }
+    }
+
+    @Test
+    fun `resolveConfirmation sends the approved tool's output as its tool_result`() = runTest {
+        val service = mockk<ClaudeService>()
+        val request = slot<ClaudeRequest>()
+        coEvery { service.sendMessage(any(), any(), capture(request)) } returns textResponse("Deleted.")
+        val toolBridge = noTools()
+        val input = JsonObject(mapOf("noteId" to JsonPrimitive(5)))
+        coEvery { toolBridge.execute("deleteNote", input) } returns ToolExecutionResult.Success("true")
+        val history = listOf(user("delete 5"))
+
+        val result = ChatRepository(service, apiKeyManager(), toolBridge)
+            .resolveConfirmation(history, PendingToolUse("t1", "deleteNote", input), emptyList(), approved = true)
+
+        val toolResultMessage = ClaudeMessage("user", listOf(ClaudeContentBlock.ToolResult("t1", "true")))
+        assertEquals(history + toolResultMessage, request.captured.messages)
+        assertEquals("Deleted.", (result as ChatTurnResult.Done).reply)
     }
 }

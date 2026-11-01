@@ -1,12 +1,24 @@
 package com.ai.notes.data.ai.chat
 
 import androidx.appfunctions.metadata.AppFunctionArrayTypeMetadata
+import androidx.appfunctions.metadata.AppFunctionBooleanTypeMetadata
+import androidx.appfunctions.metadata.AppFunctionDataTypeMetadata
+import androidx.appfunctions.metadata.AppFunctionDoubleTypeMetadata
+import androidx.appfunctions.metadata.AppFunctionFloatTypeMetadata
+import androidx.appfunctions.metadata.AppFunctionLongTypeMetadata
+import androidx.appfunctions.metadata.AppFunctionReferenceTypeMetadata
 import androidx.appfunctions.metadata.AppFunctionIntTypeMetadata
 import androidx.appfunctions.metadata.AppFunctionMetadata
 import androidx.appfunctions.metadata.AppFunctionParameterMetadata
 import androidx.appfunctions.metadata.AppFunctionResponseMetadata
 import androidx.appfunctions.metadata.AppFunctionStringTypeMetadata
+import com.ai.notes.data.ai.model.ClaudeTool
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
@@ -117,5 +129,53 @@ class ToolSchemaBuilderTest {
 
         val noteIdSchema = tool.inputSchema["properties"]!!.jsonObject["noteId"]!!.jsonObject
         assertEquals("integer", noteIdSchema["type"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `buildTool maps every parameter type into the full JSON schema`() {
+        fun param(name: String, type: AppFunctionDataTypeMetadata) =
+            AppFunctionParameterMetadata(name = name, isRequired = true, dataType = type, description = "$name doc")
+        val metadata = AppFunctionMetadata(
+            id = "pkg#everything",
+            packageName = "com.ai.notes",
+            isEnabled = true,
+            schema = null,
+            parameters = listOf(
+                param("count", AppFunctionLongTypeMetadata(isNullable = false)),
+                param("ratio", AppFunctionFloatTypeMetadata(isNullable = false)),
+                param("score", AppFunctionDoubleTypeMetadata(isNullable = false)),
+                param("pinned", AppFunctionBooleanTypeMetadata(isNullable = false)),
+                param("note", AppFunctionReferenceTypeMetadata("Note", isNullable = false)),
+                param("ids", AppFunctionArrayTypeMetadata(AppFunctionIntTypeMetadata(false), isNullable = true)),
+            ),
+            response = AppFunctionResponseMetadata(valueType = AppFunctionStringTypeMetadata(isNullable = false)),
+            description = "All types.",
+        )
+
+        val tool = ToolSchemaBuilder.buildTool(metadata)
+
+        fun prop(type: String, name: String) = buildJsonObject {
+            put("type", type)
+            put("description", "$name doc")
+        }
+        val expected = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                put("count", prop("integer", "count"))
+                put("ratio", prop("number", "ratio"))
+                put("score", prop("number", "score"))
+                put("pinned", prop("boolean", "pinned"))
+                put("note", prop("string", "note"))
+                putJsonObject("ids") {
+                    put("type", "array")
+                    putJsonObject("items") { put("type", "integer") }
+                    put("description", "ids doc")
+                }
+            }
+            putJsonArray("required") {
+                add("count"); add("ratio"); add("score"); add("pinned"); add("note")
+            }
+        }
+        assertEquals(ClaudeTool("everything", "All types.", expected), tool)
     }
 }

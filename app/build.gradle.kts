@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.ksp)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.pitest)
 }
 
 android {
@@ -80,6 +81,36 @@ androidComponents {
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
     val capital = name.removePrefix("merge").removeSuffix("Assets")
     dependsOn(tasks.matching { it.name == "ksp${capital}Kotlin" })
+}
+
+pitest {
+    targetClasses.set(
+        providers.gradleProperty("pitTargets").map { it.split(",") }.orElse(listOf("com.ai.notes.*"))
+    )
+    // Only generated, framework-wiring, or Compose UI code goes here; never logic classes.
+    excludedClasses.set(listOf(
+        "com.ai.notes.BuildConfig", "*.R", "*.R\$*",
+        "*_Impl", "*_Impl\$*",                       // Room-generated DAO/DB implementations
+        "*\$\$serializer",                           // kotlinx-serialization generated serializers
+        "com.ai.notes.AppFunctions.\$*",             // AppFunctions KSP-generated invoker/inventory
+        "com.ai.notes.data.model.\$*",               // AppFunctions KSP-generated factories
+        "*\$\$inlined\$*",                           // kotlinx.coroutines Flow operators inlined into our classes
+        "*ComposableSingletons*", "*.ui.screens.*", "*.ui.components.*", "*.ui.theme.*",
+        "*.ui.navigation.*", "*Activity*",           // Compose UI: covered by instrumented tests
+        "com.ai.notes.App", "com.ai.notes.data.database.NoteDatabase*",
+        "com.ai.notes.data.ai.RetrofitFactory", "com.ai.notes.*AppLogger*", // Android/DI wiring, no logic
+    ))
+    excludedMethods.set(listOf("toString", "hashCode", "component*", "copy", "copy\$default"))
+    // DEFAULTS rather than STRONGER: STRONGER adds REMOVE_CONDITIONALS_EQUAL_IF, which rewrites the
+    // `== COROUTINE_SUSPENDED` check in every suspend state machine into hundreds of unkillable
+    // mutants. DEFAULTS' REMOVE_CONDITIONALS_EQUAL_ELSE still hits those checks (expect ~80
+    // survivors on suspend-call lines; ignore them). The ORDER variants add </<=/>/>= coverage,
+    // which the coroutine machinery never emits.
+    mutators.set(listOf("DEFAULTS", "REMOVE_CONDITIONALS_ORDER_IF", "REMOVE_CONDITIONALS_ORDER_ELSE"))
+    threads.set(Runtime.getRuntime().availableProcessors())
+    outputFormats.set(listOf("HTML", "XML"))
+    timestampedReports.set(false)
+    timeoutConstInMillis.set(4000)
 }
 
 dependencies {
